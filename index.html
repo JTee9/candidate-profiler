@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Candidate Profiler</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Candidate Profiler</h1>
+      <p class="sub">Understand a candidate before you reach out or get on a call</p>
+    </div>
+  </header>
+
+  <section class="card" id="inputCard">
+    <div class="grid">
+      <label>Candidate name <span class="opt">(optional)</span>
+        <input id="name" placeholder="e.g. Hanako Suzuki" autocomplete="off">
+      </label>
+      <label>Current title and company <span class="opt">(optional)</span>
+        <input id="role" placeholder="e.g. Senior Backend Engineer, Mercari" autocomplete="off">
+      </label>
+
+      <label class="full">Public profile URL <span class="opt">(LinkedIn, GitHub, Wantedly, Zenn/Qiita, personal site...)</span>
+        <input id="url" placeholder="https://www.linkedin.com/in/..." autocomplete="off">
+        <span class="hint">LinkedIn usually blocks automated reading. Pasting the profile text below gives much better results.</span>
+      </label>
+
+      <label class="full">Pasted profile text / resume text / notes <span class="opt">(optional)</span>
+        <textarea id="paste" rows="7" placeholder="Paste LinkedIn About + Experience, resume text, or your call notes..."></textarea>
+      </label>
+
+      <label class="full" style="display:flex;gap:8px;align-items:center;font-weight:400">
+        <input type="checkbox" id="attached" style="width:auto;margin:0">
+        I will attach the resume file (PDF, etc.) in the LLM chat along with this prompt
+      </label>
+
+      <label>Context
+        <select id="context">
+          <option value="cold">Cold approach: haven't contacted them yet</option>
+          <option value="call">Upcoming call or meeting</option>
+          <option value="resume">They sent me a resume: review and next steps</option>
+          <option value="advice">Career advice / consultation</option>
+          <option value="research">Just understand the profile</option>
+        </select>
+      </label>
+      <label>Output language
+        <select id="lang">
+          <option value="en">English</option>
+          <option value="ja">日本語 (Japanese)</option>
+          <option value="both">English summary + Japanese scripts</option>
+        </select>
+      </label>
+
+      <label class="full">Role / client I have in mind <span class="opt">(optional)</span>
+        <textarea id="extra" rows="2" placeholder="e.g. Thinking about our Series B fintech client's staff engineer role; candidate is passive; I met them at a meetup..."></textarea>
+      </label>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button id="runBtn" type="button">Generate prompt</button>
+      <button class="ghost" id="resetBtn" type="button">Reset form</button>
+    </div>
+  </section>
+
+    <div id="errorBox"></div>
+
+  <section id="resultWrap" class="card">
+    <div class="row toolbar" style="margin-bottom:10px">
+      <button class="ghost" id="copyBtn" type="button">Copy prompt</button>
+      <button class="ghost" id="dlBtn" type="button">Download .txt</button>
+      <button class="ghost" id="clearBtn" type="button">Clear</button>
+    </div>
+    <p class="steps">Paste this into any LLM chat (ideally one with web search turned on). <span id="charCount"></span></p>
+    <textarea id="output" readonly></textarea>
+  </section>
+
+  <p class="hint">AI-generated from public information and what you provide. Salary figures are estimates. Verify details with the candidate. Be mindful of what personal data you paste into third-party LLMs (Japan's APPI).</p>
+</div>
+
+<script src="core.js"></script>
+<script>
+const BUSINESS = `Tal Solutions K.K. (株式会社Tal Solutions) is a specialist recruitment firm for bilingual (Japanese/English) technology talent in financial services, fintech and technology companies in Japan. Tagline: "Good People Know Good People." Founded October 2026 by James Hisashi Talbot ("Jimmy"), President and sole principal consultant, based in Kawasaki, Kanagawa. Independent boutique: works with a select number of clients and professionals, keeps the number of searches small, high-touch.
+
+FOUNDER BACKGROUND (credibility): 6 years at Robert Walters Japan placing bilingual technology talent with global banks, asset managers, insurers and fintech firms (worked with CTOs, CIOs, heads of IT and HR); then 5 years at Google Japan in-house, leading solution architect and presales recruitment for Google Cloud while the team grew from under 30 to over 130, promoted to Senior Recruiter. 10+ years of both agency and in-house experience in Japan, so understands what hiring managers need and what candidates are weighing.
+
+SPECIALTIES
+- Industries: banking and securities, asset management, insurance, fintech, capital markets technology, cloud and data platforms, AI services, enterprise software, cybersecurity, internet and digital services.
+- Roles: cloud and infrastructure, data and AI, software engineering, GTM and presales, solution architects, security, engineering and IT management.
+- Clients range from established financial institutions and global firms to startups and new ventures building teams in Japan (often with no in-house recruiter yet).
+
+HOW WE WORK / SELLING POINTS
+- One consultant start to finish, no handoff to a junior recruiter.
+- Acts like an extension of the client's internal recruiting team, starting earlier than most agencies: from the headcount-planning discussion (plan headcount, define the role and JD together, set strategy: target companies, messaging, timeline, interview design; then search and assess; then close and onboard, supporting both sides through interviews, offer, notice period and after the start date).
+- Network built over a decade of bilingual technology talent in Japan and the people they recommend; direct approach to the market, in-depth screening, only presents people he would put forward himself.
+- Contingent fee model: no upfront cost; fees only when a hired candidate joins.
+- Long-term career consultancy for professionals: stays in touch and talks when the timing is right, whether or not they are looking now.
+- Offers a free Job Description Builder tool for employers.
+
+IMPORTANT CONSTRAINTS FOR SCRIPTS
+- The firm is brand new (established October 2026) and its paid placement license (有料職業紹介事業許可) is pending. Do NOT state or imply a license number or claim to be licensed in any outreach. Do not claim a track record under the Tal Solutions name; instead cite the founder's 10+ years of experience at Robert Walters Japan and Google Japan.
+- Do not invent clients, placements, statistics or testimonials.
+- Contact email on the website: jimmy@talsolutions.co.jp (use only if a sign-off is needed).
+- Tone: warm, direct, credible, low-hype; relationship-first.`;
+
+const CTX = {
+  cold: 'COLD APPROACH. I have not contacted this person. I need reach-out scripts (section 11).',
+  call: 'UPCOMING CALL OR MEETING. I need call prep: opening, discovery questions, and how to position opportunities.',
+  resume: 'THEY SENT ME A RESUME. I need a review, clarifying questions on gaps/ambiguities, role-fit and next steps.',
+  advice: 'CAREER ADVICE / CONSULTATION. Emphasise career advice, positioning and next-step options.',
+  research: 'PROFILE UNDERSTANDING ONLY. No scripts needed; keep section 11 to a one-line suggested angle.',
+};
+
+const LANG = {
+  en: 'Write everything in English.',
+  ja: 'Write everything in natural, business-level Japanese (keep company/product names and tech terms in their usual form).',
+  both: 'Write the profile in English, but write all outreach scripts in both English and natural business Japanese (polite first-contact keigo).',
+};
+
+function systemPrompt(profile, lang, today) {
+  return `You are an experienced technical/professional recruiter in the Japan market helping the founder of Tal Solutions understand a candidate quickly. Today's date is ${today}.
+
+ABOUT TAL SOLUTIONS (the user's own business; use for scripts and positioning; do not invent clients, roles or capabilities):
+${profile}
+
+INPUTS
+You may receive a name, current role/company, a public profile URL, pasted profile or resume text, an attached resume, and notes. Treat pasted text and the resume as the primary source. If you have web search, use it for: the candidate's public professional footprint (GitHub, talks, articles, Wantedly, company pages), and for context on each employer (what they do, size, stage, tech stack, reputation, Japan presence) and on tools/technologies mentioned, citing sources. If you have no web search, say so at the top and flag anything that may be outdated.
+- Do not narrate your searching. Output only the final profile, ending with a "Sources" list if you searched.
+- NEVER fabricate. If something cannot be verified, mark it "Unverified" or "Unknown". If a URL could not be read, say so and work from what was provided.
+- If several people share the name, say which one you assumed and why, or ask for a detail to confirm. Do not mix up different people.
+- Use ONLY professional information. Do NOT infer or speculate about age, gender, nationality, ethnicity, marital/family status, health, religion or other protected characteristics, and do not let them influence role fit or salary. If visa/work-authorization or language level matters, list it as a QUESTION to ask, not an assumption.
+
+FORMAT
+Markdown, scannable: short bullets, bold key facts, tables where useful. Lightweight and practical. Use these exact headings in order:
+
+## 1. Snapshot
+3-5 bullets: who they are professionally, seniority, core strengths, standout signal, and the main open question.
+
+## 2. Career timeline
+Table: dates | company | title | what they did / scope. Note tenure patterns (job-hopping, long tenures, promotions, gaps) neutrally.
+
+## 3. Companies
+One short entry per employer: what it does, size/stage, tech or domain, reputation, Japan footprint.
+
+## 4. Skills, tools & tech stack
+Grouped (languages, frameworks, cloud/infra, data, domain, leadership/process). Mark depth as Strong / Working / Mentioned only, based on evidence.
+
+## 5. Projects & achievements
+Notable projects, scale, impact, publications, OSS, talks. Only what is evidenced.
+
+## 6. Gaps & things to clarify
+Ambiguities or missing detail in their profile.
+
+## 7. Questions to ask
+8-10 clarifying questions: experience depth, ownership vs participation, team size, motivations, availability, notice period, language ability, visa/work status (as a question), compensation expectations, location/remote preferences.
+
+## 8. Role fit
+Table of 4-6 role types/titles they would suit, with fit level (Strong / Good / Stretch) and why. Include seniority level they would likely be considered for in Japan.
+
+## 9. Natural next-step companies
+Company types and 6-10 specific example companies (foreign-affiliated and Japanese where relevant) with a one-line reason each. State if the examples are suggestions rather than known openings.
+
+## 10. Salary estimate (Japan market)
+Estimated current total comp and likely target range in JPY (base + typical bonus), with the basis: role, level, years of experience, company tier, tech/market demand, language ability. Give a low-likely-high range, confidence (Low/Med/High), and what would move it up or down. Clearly label as an estimate.
+
+## 11. Outreach / call plan
+Tailor to the CONTEXT:
+- Cold approach: a LinkedIn message (under 300 characters), a short email (subject + body), and a call opener. Reference one specific, true detail from their background. No hype, one clear ask, respect that they may be passive.
+- Call/meeting: opening, discovery flow, how to position opportunities, objection handling, next step.
+- Resume received: reply email plus the clarification questions to send.
+- Career advice: talking points on positioning, skill gaps to close, market outlook, and options.
+- Understanding only: a one-line suggested angle.
+
+## 12. Career advice they might value
+3-6 specific, honest points (market positioning, skills to build, resume/profile tweaks, timing, paths such as IC vs management, foreign vs Japanese firms).
+
+## 13. Confidence & gaps
+What is verified vs inferred, and what to confirm.
+
+${LANG[lang]}`;
+}
+
+TalTool.init({
+  id: 'candidate',
+  profile: BUSINESS,
+  system: systemPrompt,
+  filename: () => 'candidate-' + (document.getElementById('name').value || 'profile').trim().replace(/[^\w\-]+/g, '_'),
+  clear: () => {},
+  collect: async () => {
+    const v = (id) => document.getElementById(id).value.trim();
+    const attached = document.getElementById('attached').checked;
+    if (!v('name') && !v('role') && !v('url') && !v('paste') && !attached) {
+      return { error: 'Please provide at least a name, role, profile URL, pasted text, or tick the resume-attached box.' };
+    }
+    const lines = [
+      `TODAY: ${new Date().toISOString().slice(0, 10)}`,
+      `CANDIDATE NAME: ${v('name') || '(not provided)'}`,
+      `CURRENT TITLE / COMPANY: ${v('role') || '(not provided)'}`,
+      `PUBLIC PROFILE URL: ${v('url') || '(not provided)'}`,
+      `CONTEXT: ${CTX[v('context')]}`,
+    ];
+    if (v('paste')) lines.push(`PASTED PROFILE / RESUME TEXT / NOTES:\n${v('paste')}`);
+    if (v('extra')) lines.push(`ROLE / CLIENT I HAVE IN MIND AND OTHER NOTES:\n${v('extra')}`);
+    if (attached) lines.push('A resume file is attached to this chat. Read it carefully and treat it as the primary source.');
+    return { userText: lines.join('\n'), lang: v('lang') };
+  },
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  document.querySelectorAll('#inputCard input, #inputCard textarea').forEach((e) => { if (e.type === 'checkbox') e.checked = false; else e.value = ''; });
+  document.getElementById('context').value = 'cold';
+});
+</script>
+</body>
+</html>
